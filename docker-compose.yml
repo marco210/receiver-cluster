@@ -64,7 +64,23 @@ services:
       "--grpc-address", "0.0.0.0:10101",
       "--http-address", "0.0.0.0:10102",
       "--objstore.config-file", "/etc/minio-bucket.yml"]
-     
+  
+   thanos-compact:
+    container_name: thanos-compact
+    image: "quay.io/thanos/thanos:v0.21.0"
+    networks:
+      - my-network
+    volumes:
+      - ./config/minio-bucket.yml:/etc/minio-bucket.yml
+    ports:
+      - "19095:19095"
+    entrypoint: ["/bin/thanos", "compact", "--wait",
+      "--log.level", "debug",
+      "--http-address", "0.0.0.0:19095",
+      "--wait-interval", "30s",
+      "--consistency-delay", "0s",
+      "--objstore.config-file", "/etc/minio-bucket.yml"]
+      
   thanos-receive-0:
     container_name: thanos-receive-0
     image: "quay.io/thanos/thanos:v0.21.0"
