@@ -4,7 +4,7 @@ A Docker compose file configuration to demonstrate Thanos Receive 3 nodes cluste
   * `git clone`
   * `docker-compose up -d`
 # ARCHITECTURE
-
+![markdown](https://github.com/marco210/receiver-cluster/blob/master/images/thanos-receive.png)
 # COMPONENT
 1. Prometheus
 2. Thanos Receive
