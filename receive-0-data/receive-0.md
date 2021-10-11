@@ -1,1 +1,1 @@
-#Thư mục lưu trữ data THANOS RECEIVE 0
+# Thư mục lưu trữ data THANOS RECEIVE 0
