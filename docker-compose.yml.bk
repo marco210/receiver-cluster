@@ -1,0 +1,161 @@
+version: "3.7"
+
+services:
+  minio:
+    container_name: minio
+    image:  quay.io/minio/minio
+    networks:
+      - my-network
+    volumes:
+      - ./minio-data:/data        
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ACCESS_KEY: minio
+      MINIO_SECRET_KEY: melovethanos
+    command: server --console-address=:9001 /data 
+
+  nodeexporter:
+    image: prom/node-exporter:v1.2.2
+    container_name: nodeexporter
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    restart: unless-stopped
+    ports:
+            - "9100:9100"
+    networks:
+      - my-network
+ 
+  thanos-query:
+    container_name: thanos-query
+    image: "quay.io/thanos/thanos:v0.21.0"
+    networks:
+      - my-network
+    ports:
+      - "10909:10909"
+    entrypoint: ["/bin/thanos", "query",
+      "--log.level", "debug",
+      "--http-address", "0.0.0.0:10909",
+      "--query.replica-label", "receive_replica",
+      "--store", "thanos-store:10101",
+      "--store", "thanos-receive-0:10701",
+      "--store", "thanos-receive-1:10801",
+      "--store", "thanos-receive-2:10901" ]
+
+  thanos-store:
+    container_name: thanos-store
+    image: "quay.io/thanos/thanos:v0.21.0"
+    networks:
+      - my-network
+    volumes:
+      - ./config/minio-bucket.yml:/etc/minio-bucket.yml
+    ports:
+      - "10101:10101"
+    entrypoint: ["/bin/thanos", "store",
+      "--log.level", "debug",
+      "--grpc-address", "0.0.0.0:10101",
+      "--http-address", "0.0.0.0:10102",
+      "--objstore.config-file", "/etc/minio-bucket.yml"]
+     
+  thanos-receive-0:
+    container_name: thanos-receive-0
+    image: "quay.io/thanos/thanos:v0.21.0"
+    networks:
+      - my-network
+    volumes:
+      - ./receive-0-data:/tsdb
+      - ./config/minio-bucket.yml:/etc/minio-bucket.yml
+      - ./config/local_hashring.json:/etc/thanos_hashring.json
+    ports:
+      - "10701-10703"
+    entrypoint: ["/bin/thanos", "receive",
+        "--log.level", "debug",
+        "--tsdb.path", "/tsdb",
+        "--grpc-address", "0.0.0.0:10701",
+        "--http-address", "0.0.0.0:10702",
+        "--remote-write.address", "0.0.0.0:10703",
+        "--receive.replication-factor", "2",
+        "--label", "receive_replica=\"0\"",
+        "--receive.local-endpoint", "thanos-receive-0:10701",
+        "--objstore.config-file", "/etc/minio-bucket.yml",
+        "--receive.hashrings-file=/etc/thanos_hashring.json" ]
+
+  thanos-receive-1:
+    container_name: thanos-receive-1
+    image: "quay.io/thanos/thanos:v0.21.0"
+    networks:
+      - my-network
+    volumes:
+      - ./receive-1-data:/tsdb
+      - ./config/minio-bucket.yml:/etc/minio-bucket.yml
+      - ./config/local_hashring.json:/etc/thanos_hashring.json
+    ports:
+      - "10801-10803"
+    entrypoint: ["/bin/thanos", "receive",
+        "--log.level", "debug",
+        "--tsdb.path", "/tsdb",
+        "--grpc-address", "0.0.0.0:10801",
+        "--http-address", "0.0.0.0:10802",
+        "--remote-write.address", "0.0.0.0:10803",
+        "--receive.replication-factor", "2",
+        "--label", "receive_replica=\"1\"",
+        "--receive.local-endpoint", "thanos-receive-1:10801",
+        "--objstore.config-file", "/etc/minio-bucket.yml",
+        "--receive.hashrings-file=/etc/thanos_hashring.json" ]
+
+  thanos-receive-2:
+    container_name: thanos-receive-2
+    image: "quay.io/thanos/thanos:v0.21.0"
+    networks:
+      - my-network
+    volumes:
+      - ./receive-2-data:/tsdb
+      - ./config/minio-bucket.yml:/etc/minio-bucket.yml
+      - ./config/local_hashring.json:/etc/thanos_hashring.json
+    ports:
+      - "10901-10903"
+    entrypoint: ["/bin/thanos", "receive",
+        "--log.level", "debug",
+        "--tsdb.path", "/tsdb",
+        "--grpc-address", "0.0.0.0:10901",
+        "--http-address", "0.0.0.0:10902",
+        "--remote-write.address", "0.0.0.0:10903",
+        "--receive.replication-factor", "2",
+        "--label", "receive_replica=\"2\"",
+        "--receive.local-endpoint", "thanos-receive-2:10901",
+        "--objstore.config-file", "/etc/minio-bucket.yml",
+        "--receive.hashrings-file=/etc/thanos_hashring.json" ]
+
+  prometheus:
+    container_name: prometheus
+    image: "prom/prometheus:v2.17.2"
+    networks:
+      - my-network
+    user: "root:root"
+    volumes:
+      - ./prom-data:/prom-tsdb
+      - ./config/local_prom.yaml:/etc/prom.yaml
+    ports:
+      - "9090:9090"
+    entrypoint: ["/bin/prometheus",
+      "--log.level=debug",
+      "--storage.tsdb.retention.time=72h",
+      "--config.file=/etc/prom.yaml",
+      "--storage.tsdb.path=/prom-tsdb",
+      "--storage.tsdb.min-block-duration=2h",
+      "--storage.tsdb.max-block-duration=2h",
+      "--web.enable-lifecycle"]
+
+
+networks:
+  my-network:
+    driver: bridge
+
